@@ -1,6 +1,6 @@
 # ImageSwiperApp
 
-ImageSwiperApp is a React Native and Expo Router project built for a CMPSC 475 application programming assignment. The assignment asked for a mobile app that displays random dog images and lets users swipe left or right in a Tinder-style interaction. I extended the class project into a portfolio-ready app by hardening API loading, improving responsive layout, and adding a GitHub Pages web deployment path.
+ImageSwiperApp is a React Native and Expo Router project. The mobile app displays random dog images and lets users swipe left or right in a Tinder-style interaction. The project is extended into a portfolio-ready app by hardening API loading, improving responsive layout, and adding a GitHub Pages web deployment path.
 
 ## Purpose
 
