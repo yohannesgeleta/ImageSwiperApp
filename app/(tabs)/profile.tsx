@@ -1,118 +1,98 @@
-import { ThemedText } from '@/components/themed-text';
 import { Picker } from '@react-native-picker/picker';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
+  Text,
   TextInput,
-  View
+  View,
 } from 'react-native';
 
-type DogCeoBreedResponse = {
-  message: Record<string, string[]>;
-  status: string;
-};
-
-type DogApiBreed = {
-  id: string;
-  attributes: {
-    name: string;
-    description?: string;
-  };
-};
-
-type DogApiBreedResponse = {
-  data: DogApiBreed[];
-};
-
-function normalizeBreedName(value: string) {
-  return value.toLowerCase().replace(/[^a-z]/g, '');
-}
-
-function formatBreedLabel(value: string) {
-  return value
-    .split(/[-\s]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-}
-
-export let selectedBreedPreference = 'chow';
+import { useDogPreference } from '@/contexts/dog-preferences';
+import {
+  fetchDogBreedCatalog,
+  formatBreedLabel,
+  normalizeBreedName,
+  type DogBreedCatalog,
+} from '@/services/dog-api';
 
 export default function Profile() {
+  const { selectedBreed: confirmedBreed, setSelectedBreed: setConfirmedBreed } = useDogPreference();
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
   const [confirmedName, setConfirmedName] = useState('');
   const [confirmedAge, setConfirmedAge] = useState('');
   const [breedOptions, setBreedOptions] = useState<string[]>([]);
-  const [selectedBreed, setSelectedBreed] = useState('');
-  const [confirmedBreed, setConfirmedBreed] = useState('');
+  const [selectedBreed, setSelectedBreed] = useState(confirmedBreed);
   const [breedDescriptions, setBreedDescriptions] = useState<Record<string, string>>({});
   const [loadingBreeds, setLoadingBreeds] = useState(true);
-  const [loadingDescription, setLoadingDescription] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [descriptionWarning, setDescriptionWarning] = useState('');
+
+  const applyBreedCatalog = useCallback((catalog: DogBreedCatalog) => {
+    setBreedDescriptions(catalog.descriptions);
+    setBreedOptions(catalog.breeds);
+    setDescriptionWarning(catalog.descriptionWarning ?? '');
+
+    setSelectedBreed((currentBreed) =>
+      catalog.breeds.includes(currentBreed) || catalog.breeds.length === 0
+        ? currentBreed
+        : catalog.breeds[0]
+    );
+  }, []);
+
+  const loadBreeds = async () => {
+    try {
+      setLoadingBreeds(true);
+      setErrorMessage('');
+      const catalog = await fetchDogBreedCatalog();
+      applyBreedCatalog(catalog);
+    } catch {
+      setBreedOptions([]);
+      setBreedDescriptions({});
+      setErrorMessage('Could not load dog breeds. Check your connection and try again.');
+    } finally {
+      setLoadingBreeds(false);
+    }
+  };
 
   useEffect(() => {
-    const loadBreeds = async () => {
+    let isMounted = true;
+
+    const loadInitialBreeds = async () => {
       try {
         setLoadingBreeds(true);
         setErrorMessage('');
+        const catalog = await fetchDogBreedCatalog();
 
-        const [dogCeoResponse, dogApiResponse] = await Promise.all([
-          fetch('https://dog.ceo/api/breeds/list/all'),
-          fetch('https://dogapi.dog/api/v2/breeds?page[size]=1000'),
-        ]);
-
-        const dogCeoData: DogCeoBreedResponse = await dogCeoResponse.json();
-        const dogApiData: DogApiBreedResponse = await dogApiResponse.json();
-
-        const dogCeoBreeds = Object.keys(dogCeoData.message || {});
-        const descriptions: Record<string, string> = {};
-
-        dogApiData.data.forEach((breed) => {
-          const key = normalizeBreedName(breed.attributes.name);
-          if (breed.attributes.description) {
-            descriptions[key] = breed.attributes.description;
-          }
-        });
-
-        setBreedDescriptions(descriptions);
-        setBreedOptions(dogCeoBreeds);
-
-        if (dogCeoBreeds.length > 0) {
-          setSelectedBreed(dogCeoBreeds[0]);
+        if (isMounted) {
+          applyBreedCatalog(catalog);
         }
-      } catch (error) {
-        console.error(error);
-        setErrorMessage('Could not load dog breeds right now.');
+      } catch {
+        if (isMounted) {
+          setBreedOptions([]);
+          setBreedDescriptions({});
+          setErrorMessage('Could not load dog breeds. Check your connection and try again.');
+        }
       } finally {
-        setLoadingBreeds(false);
+        if (isMounted) {
+          setLoadingBreeds(false);
+        }
       }
     };
 
-    loadBreeds();
-  }, []);
+    loadInitialBreeds();
 
-  useEffect(() => {
-    if (!confirmedBreed) {
-      setLoadingDescription(false);
-      return;
-    }
+    return () => {
+      isMounted = false;
+    };
+  }, [applyBreedCatalog]);
 
-    setLoadingDescription(true);
-    const timer = setTimeout(() => {
-      setLoadingDescription(false);
-    }, 150);
-
-    return () => clearTimeout(timer);
-  }, [confirmedBreed]);
-
-  const selectedBreedDescription = !confirmedBreed
-    ? 'Select a breed and press Select to see its description.'
-    : breedDescriptions[normalizeBreedName(confirmedBreed)] ||
-      'A description for this breed was not available from the breed information API.';
+  const selectedBreedDescription =
+    breedDescriptions[normalizeBreedName(confirmedBreed)] ||
+    'A description for this breed was not available from the breed information API.';
 
   const handleConfirmProfile = () => {
     setConfirmedName(name.trim());
@@ -120,173 +100,255 @@ export default function Profile() {
   };
 
   const handleConfirmBreed = () => {
-    setConfirmedBreed(selectedBreed);
-    selectedBreedPreference = selectedBreed;
+    if (selectedBreed) {
+      setConfirmedBreed(selectedBreed);
+    }
   };
 
   return (
-      <ScrollView contentContainerStyle={styles.container}>
-        <ThemedText type="title">Profile</ThemedText>
-        <ThemedText style={styles.sectionText}>
-          Enter your details and pick your favorite dog breed.
-        </ThemedText>
+    <ScrollView contentContainerStyle={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.eyebrow}>Profile</Text>
+        <Text style={styles.title}>Customize the swiper</Text>
+        <Text style={styles.subtitle}>Save a simple profile and choose which breed appears on the home screen.</Text>
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.sectionTitle}>Your Details</Text>
 
         {(confirmedName || confirmedAge) ? (
-          <View style={styles.summaryCard}>
-            <ThemedText type="subtitle">Your Profile</ThemedText>
-            <ThemedText style={styles.summaryText}>Name: {confirmedName || 'Not provided'}</ThemedText>
-            <ThemedText style={styles.summaryText}>Age: {confirmedAge || 'Not provided'}</ThemedText>
+          <View style={styles.summaryBox}>
+            <Text style={styles.summaryText}>Name: {confirmedName || 'Not provided'}</Text>
+            <Text style={styles.summaryText}>Age: {confirmedAge || 'Not provided'}</Text>
           </View>
         ) : null}
 
         <View style={styles.formGroup}>
-          <ThemedText type="subtitle">Name</ThemedText>
+          <Text style={styles.label}>Name</Text>
           <TextInput
             value={name}
             onChangeText={setName}
             placeholder="Enter your name"
+            placeholderTextColor="#7b8794"
             style={styles.input}
           />
         </View>
 
         <View style={styles.formGroup}>
-          <ThemedText type="subtitle">Age</ThemedText>
+          <Text style={styles.label}>Age</Text>
           <TextInput
             value={age}
             onChangeText={setAge}
             placeholder="Enter your age"
+            placeholderTextColor="#7b8794"
             keyboardType="number-pad"
             style={styles.input}
           />
         </View>
 
-        <Pressable style={styles.confirmButton} onPress={handleConfirmProfile}>
-          <ThemedText style={styles.confirmButtonText}>Confirm Name and Age</ThemedText>
+        <Pressable style={styles.primaryButton} onPress={handleConfirmProfile}>
+          <Text style={styles.primaryButtonText}>Confirm Name and Age</Text>
         </Pressable>
+      </View>
 
-        <View style={styles.formGroup}>
-          <ThemedText type="subtitle">Select a Dog Breed</ThemedText>
-          {loadingBreeds ? (
-            <ActivityIndicator size="large" style={styles.loader} />
-          ) : errorMessage ? (
-            <ThemedText style={styles.errorText}>{errorMessage}</ThemedText>
-          ) : (
+      <View style={styles.panel}>
+        <Text style={styles.sectionTitle}>Dog Breed</Text>
+        <Text style={styles.helperText}>Current breed: {formatBreedLabel(confirmedBreed)}</Text>
+
+        {loadingBreeds ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator size="small" color="#2c7a7b" />
+            <Text style={styles.helperText}>Loading breeds...</Text>
+          </View>
+        ) : errorMessage ? (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>{errorMessage}</Text>
+            <Pressable style={styles.secondaryButton} onPress={loadBreeds}>
+              <Text style={styles.secondaryButtonText}>Retry</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <>
             <View style={styles.pickerWrapper}>
               <Picker
                 selectedValue={selectedBreed}
                 onValueChange={(itemValue) => setSelectedBreed(itemValue)}
-                style={{ color: 'black' }}
-                itemStyle={{ color: 'black' }}>
+                style={styles.picker}
+                itemStyle={styles.pickerItem}>
                 {breedOptions.map((breed) => (
-                  <Picker.Item
-                    key={breed}
-                    label={formatBreedLabel(breed)}
-                    value={breed}
-                  />
+                  <Picker.Item key={breed} label={formatBreedLabel(breed)} value={breed} />
                 ))}
               </Picker>
             </View>
-          )}
 
-          <Pressable
-            style={styles.confirmButton}
-            onPress={handleConfirmBreed}
-            disabled={loadingBreeds || !!errorMessage || !selectedBreed}>
-            <ThemedText style={styles.confirmButtonText}>Select</ThemedText>
-          </Pressable>
-        </View>
+            <Pressable
+              style={({ pressed }) => [
+                styles.primaryButton,
+                (pressed || !selectedBreed) && styles.mutedButton,
+              ]}
+              onPress={handleConfirmBreed}
+              disabled={!selectedBreed}>
+              <Text style={styles.primaryButtonText}>Use Selected Breed</Text>
+            </Pressable>
+          </>
+        )}
+      </View>
 
-        <View style={styles.descriptionCard}>
-          <ThemedText type="subtitle">Breed Description</ThemedText>
-          {loadingDescription ? (
-            <ActivityIndicator size="small" style={styles.loader} />
-          ) : (
-            <>
-              <ThemedText style={styles.selectedBreedLabel}>
-                {confirmedBreed ? formatBreedLabel(confirmedBreed) : 'No breed selected'}
-              </ThemedText>
-              <ThemedText style={styles.descriptionText}>
-                {selectedBreedDescription}
-              </ThemedText>
-            </>
-          )}
-        </View>
-      </ScrollView>
+      <View style={styles.panel}>
+        <Text style={styles.sectionTitle}>Breed Description</Text>
+        {descriptionWarning ? <Text style={styles.warningText}>{descriptionWarning}</Text> : null}
+        <Text style={styles.selectedBreedLabel}>{formatBreedLabel(confirmedBreed)}</Text>
+        <Text style={styles.descriptionText}>{selectedBreedDescription}</Text>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    padding: 16,
+    flexGrow: 1,
+    padding: 20,
     paddingBottom: 40,
-    backgroundColor:'#b71908ff'
+    backgroundColor: '#f7f3ea',
+    gap: 16,
   },
-  sectionText: {
-    marginTop: 8,
+  header: {
+    gap: 6,
+    marginBottom: 4,
+  },
+  eyebrow: {
+    color: '#2c7a7b',
+    fontSize: 14,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  title: {
+    color: '#1f2933',
+    fontSize: 30,
+    fontWeight: '800',
+  },
+  subtitle: {
+    color: '#52606d',
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  panel: {
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
+    backgroundColor: '#ffffff',
+    borderColor: '#d9e2ec',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 16,
+    gap: 12,
+  },
+  sectionTitle: {
+    color: '#1f2933',
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  summaryBox: {
+    backgroundColor: '#f0f7f7',
+    borderColor: '#b7d4d4',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    gap: 4,
+  },
+  summaryText: {
+    color: '#1f2933',
+    fontSize: 16,
   },
   formGroup: {
-    gap: 8,
+    gap: 6,
+  },
+  label: {
+    color: '#323f4b',
+    fontSize: 15,
+    fontWeight: '700',
   },
   input: {
     borderWidth: 1,
-    borderColor: '#c7c7c7',
-    borderRadius: 10,
+    borderColor: '#bcccdc',
+    borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 12,
     fontSize: 16,
+    color: '#1f2933',
     backgroundColor: '#ffffff',
   },
-  loader: {
-    marginTop: 12,
-  },
-  confirmButton: {
-    backgroundColor: '#2f80ed',
+  primaryButton: {
+    backgroundColor: '#2c7a7b',
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 10,
+    borderRadius: 8,
     alignItems: 'center',
   },
-  confirmButtonText: {
+  primaryButtonText: {
     color: '#ffffff',
+    fontSize: 16,
     fontWeight: '700',
   },
-  summaryCard: {
-    marginTop: 16,
+  secondaryButton: {
+    borderColor: '#2c7a7b',
     borderWidth: 1,
-    borderColor: '#b71908ff',
-    borderRadius: 14,
-    padding: 16,
-    gap: 8,
-    backgroundColor: '#b71908ff',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    alignSelf: 'flex-start',
   },
-  summaryText: {
-    fontSize: 16,
+  secondaryButtonText: {
+    color: '#2c7a7b',
+    fontWeight: '700',
+  },
+  mutedButton: {
+    opacity: 0.65,
+  },
+  helperText: {
+    color: '#52606d',
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   pickerWrapper: {
     borderWidth: 1,
-    borderColor: '#c7c7c7',
-    borderRadius: 10,
+    borderColor: '#bcccdc',
+    borderRadius: 8,
     overflow: 'hidden',
     backgroundColor: '#ffffff',
   },
-  descriptionCard: {
-    borderWidth: 1,
-    borderColor: '#b71908ff',
-    borderRadius: 1,
-    padding: 16,
-    gap: 10,
-    backgroundColor:'#b71908ff',
+  picker: {
+    color: '#1f2933',
   },
-  selectedBreedLabel: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#ffffff',
+  pickerItem: {
+    color: '#1f2933',
   },
-  descriptionText: {
-    lineHeight: 22,
+  errorBox: {
+    gap: 12,
   },
   errorText: {
-    color: '#c0392b',
+    color: '#9b1c1c',
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  warningText: {
+    color: '#8a6d1d',
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  selectedBreedLabel: {
+    color: '#2c7a7b',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  descriptionText: {
+    color: '#323f4b',
+    fontSize: 16,
+    lineHeight: 24,
   },
 });

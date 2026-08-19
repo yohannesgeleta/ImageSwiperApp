@@ -41,6 +41,7 @@
       ]
     ],
     "experiments": {
+      "baseUrl": "/ImageSwiperApp",
       "typedRoutes": true,
       "reactCompiler": true
     }

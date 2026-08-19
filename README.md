@@ -1,50 +1,119 @@
-# Welcome to your Expo app 👋
+# ImageSwiperApp
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+ImageSwiperApp is a React Native and Expo Router project built for a CMPSC 475 application programming assignment. The assignment asked for a mobile app that displays random dog images and lets users swipe left or right in a Tinder-style interaction. I extended the class project into a portfolio-ready app by hardening API loading, improving responsive layout, and adding a GitHub Pages web deployment path.
 
-## Get started
+## Purpose
 
-1. Install dependencies
+The goal of this project is to demonstrate practical mobile and web app development skills:
 
-   ```bash
-   npm install
-   ```
+- Building a cross-platform Expo app with TypeScript
+- Using gesture-driven UI with React Native Gesture Handler and Reanimated
+- Fetching and validating third-party API data
+- Managing shared state across routed screens
+- Preparing a static web build for deployment
+- Documenting setup, build, and QA steps for other developers
 
-2. Start the app
+## Features
 
-   ```bash
-   npx expo start
-   ```
+- Swipeable dog image cards with animated left/right gestures
+- Like and Dislike buttons for non-gesture interaction
+- Profile screen for saving a user name, age, and preferred dog breed
+- Breed list from the Dog CEO API
+- Breed descriptions from Dog API when available
+- Retry states for failed image or breed requests
+- Responsive layout for phones, tablets, and web
+- Static export configuration for GitHub Pages
 
-In the output, you'll find options to open the app in a
+## Tech Stack
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- Expo SDK 54
+- React 19
+- React Native 0.81
+- Expo Router
+- React Native Gesture Handler
+- React Native Reanimated
+- TypeScript
+- GitHub Pages deployment through `gh-pages`
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## Development Notes
 
-## Get a fresh project
+This project started from the Expo starter template, then the starter screens were replaced with a two-tab app:
 
-When you're ready, run:
+- `Home` displays the active breed and a swipeable dog image card.
+- `Profile` loads breed data, saves user details, and updates the breed used by the swiper.
+
+The shared breed preference is managed with React context instead of a mutable exported variable. API calls are isolated in `services/dog-api.ts`, where HTTP status and response shape are checked before the UI uses the returned data. This keeps network errors from becoming silent rendering bugs.
+
+## Getting Started
+
+Install dependencies:
 
 ```bash
-npm run reset-project
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Start the Expo development server:
 
-## Learn more
+```bash
+npm start
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+Run the web version locally:
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```bash
+npm run web
+```
 
-## Join the community
+## Build
 
-Join our community of developers creating universal apps.
+Create a production web build in `dist/`:
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```bash
+npm run build:web
+```
+
+The app is configured for GitHub Pages project hosting at:
+
+```text
+https://<github-username>.github.io/ImageSwiperApp/
+```
+
+If the GitHub repository is renamed, update `expo.experiments.baseUrl` in `app.json` to match the new repository name.
+
+## Deploy To GitHub Pages
+
+Push the source code to a GitHub repository named `ImageSwiperApp`, then run:
+
+```bash
+npm run deploy
+```
+
+This command runs the web export and publishes `dist/` to the `gh-pages` branch. The deploy script includes `--nojekyll` because Expo emits bundled files inside `_expo/`, and GitHub Pages must serve that folder as-is.
+
+In the GitHub repository settings, configure Pages to deploy from the `gh-pages` branch.
+
+## Quality Checks
+
+Run these checks before publishing changes:
+
+```bash
+npm run lint
+npx tsc --noEmit
+npm run build:web
+```
+
+Manual QA checklist:
+
+- Home loads a dog image on first visit.
+- Like and Dislike load another image.
+- Swiping left and right loads another image.
+- Profile loads the breed picker.
+- Changing the selected breed updates the Home screen.
+- Retry buttons appear when network requests fail.
+- The exported web build uses `/ImageSwiperApp/` asset and route paths.
+
+## APIs
+
+- Dog CEO API: random images and breed list
+- Dog API: breed description data
+
